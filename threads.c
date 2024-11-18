@@ -4,27 +4,43 @@
 #include <stdbool.h>
 #include <unistd.h>
 
-#define NUM_THREADS 3
-#define MAX_COUNT 10
+#define NUM_THREADS 5
+#define MAX_COUNT 100
 
 int winner = -1, threads_created = 0;  
-pthread_mutex_t mutex, mutex_create;  
+pthread_mutex_t mutex;  
+pthread_cond_t cond;  
+
+bool is_prime(int num) {
+    if (num <= 1) {
+        return false;
+    }
+    if (num == 2) {
+        return true;
+    }
+    if (num % 2 == 0) {
+        return false;
+    }
+    for (int i = 3; i * i <= 100; i += 2) {
+        if (num % i == 0) {
+            return false;  
+        }
+    }
+    return true;  
+}
 
 void* count_and_print(void* arg) {
     int thread_id = *((int*)arg);  
 
-    threads_created++;
     pthread_mutex_lock(&mutex);
-    if (threads_created == NUM_THREADS) {
-        pthread_cond_broadcast(&mutex_create); 
-        printf("Threads liberadas");
-    }
+    threads_created++;
 
     while (threads_created < NUM_THREADS) {
-        pthread_cond_wait(&mutex_create, &mutex);
+        pthread_cond_wait(&cond, &mutex);
         //printf("%d threads esperando a criação de todas as threads", &threads_created);
     }
 
+    pthread_cond_broadcast(&cond); 
     pthread_mutex_unlock(&mutex);
 
     for (int i = 0; i <= MAX_COUNT; i++) {
@@ -35,11 +51,20 @@ void* count_and_print(void* arg) {
             return NULL;  // Se alguém já ganhou, sai
         }
 
-        printf("Thread %d: %d\n", thread_id, i);
+        int rand_num = rand() % 101; 
+        if (rand_num % 5 == 0) {
+            printf("Thread %d encontrou um multiplo de cinco e perdeu sua vez\n", thread_id);
+            i--;
+        } else if (is_prime(rand_num)){
+            printf("Thread %d encontrou um numero primo e esta em %d\n", thread_id, i + 1);
+            i++;
+        } else{
+            printf("Thread %d estah em %d\n", thread_id, i);
+        }
 
-        if (i == MAX_COUNT) {
+        if (i >= MAX_COUNT) {
             winner = thread_id;  // Marca o vencedor
-            printf("Thread %d é a vencedora!\n", thread_id);
+            printf("Thread %d venceu!\n", thread_id);
         }
 
         pthread_mutex_unlock(&mutex);  // Libera o mutex
@@ -52,6 +77,7 @@ int main() {
     int thread_ids[NUM_THREADS];
     
     pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&cond, NULL); 
 
     for (int i = 0; i < NUM_THREADS; i++) {
         thread_ids[i] = i; 
@@ -63,6 +89,7 @@ int main() {
     }
 
     pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&cond); 
 
     return 0;
 }
